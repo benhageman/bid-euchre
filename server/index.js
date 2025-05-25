@@ -24,6 +24,9 @@ const currentTurnIndex = {};
 const winningTrump = {}; // room => 'high' | 'low' | suit
 const moonPlayer = {}; // room => player ID who is going moon
 const roundTricks = {}; // room => { team1: number, team2: number }
+const totalScores = {}; // room => { team1: number, team2: number }
+const teamScores = {}; // room => { team1: number, team2: number }
+
 
 const fullDeck = [
   '9C', '9D', '9H', '9S',
@@ -72,10 +75,73 @@ function getCardPower(card, leadSuit, trump) {
 }
 
 function trumpRank(trump) {
+  if (trump === 'low') return 1;
+  if (['clubs', 'diamonds', 'hearts', 'spades'].includes(trump)) return 2;
   if (trump === 'high') return 3;
-  if (trump === 'low') return 2;
-  return 1;
+  return 0;
 }
+
+function handleNextTurn(room) {
+  const players = rooms[room];
+  let turnIndex = currentTurnIndex[room];
+  const player = players[turnIndex];
+
+  // Skip moon teammate if needed
+  if (moonPlayer[room]) {
+    const moonIndex = players.findIndex(p => p.id === moonPlayer[room]);
+    const teammateIndex = (moonIndex + 2) % 4;
+    if (turnIndex === teammateIndex) {
+      turnIndex = (turnIndex + 1) % 4;
+      currentTurnIndex[room] = turnIndex;
+    }
+  }
+
+  const currentPlayer = players[turnIndex];
+  const hand = hands[room]?.[currentPlayer.id];
+  const trickSoFar = tricks[room] || [];
+
+  // 🚫 DO NOT auto-play for the first player (they can lead anything)
+  if (trickSoFar.length === 0) {
+    io.to(currentPlayer.id).emit('your-turn-to-play');
+    return;
+  }
+
+  const trump = winningTrump[room];
+  const leadSuit = parseCard(trickSoFar[0].card).suit;
+
+  const isTrumpSuit = trump && trump !== 'high' && trump !== 'low';
+  const sameColor = { H: 'D', D: 'H', S: 'C', C: 'S' };
+
+  const getEffectiveSuit = (card) => {
+    const { value, suit } = parseCard(card);
+    if (isTrumpSuit && value === 'J') {
+      if (suit === trump[0].toUpperCase()) return 'TRUMP'; // Right bower
+      if (suit === sameColor[trump[0].toUpperCase()]) return 'TRUMP'; // Left bower
+    }
+    return isTrumpSuit && suit === trump[0].toUpperCase() ? 'TRUMP' : suit;
+  };
+
+  const requiredSuit = getEffectiveSuit(trickSoFar[0].card);
+  const matchingCards = hand.filter((c) => getEffectiveSuit(c) === requiredSuit);
+
+  // ✅ Auto-play only if exactly one matching card is available
+  if (matchingCards.length === 1) {
+    const card = matchingCards[0];
+    console.log(`Auto-playing ${card} for ${currentPlayer.name}`);
+    io.to(room).emit('room-update', {
+      message: `${currentPlayer.name} auto-played ${card}`,
+      room
+    });
+
+    // Let the server play the card like normal
+    io.to(currentPlayer.id).emit('auto-play-card', { room, card });
+    return;
+  }
+
+  // Otherwise, let them pick
+  io.to(currentPlayer.id).emit('your-turn-to-play');
+}
+
 
 function isBetterBid(newBid, currentBid) {
     if (!currentBid) return true;
@@ -90,7 +156,38 @@ function isBetterBid(newBid, currentBid) {
     return trumpRank(newBid.trump) > trumpRank(currentBid.trump);
   }
   
-  
+  function startGame(room) {
+  const players = rooms[room];
+  if (!players || players.length !== 4) return;
+
+  const deck = [...fullDeck];
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+
+  hands[room] = {};
+  players.forEach((player, index) => {
+    const hand = deck.slice(index * 6, (index + 1) * 6);
+    hands[room][player.id] = hand;
+    io.to(player.id).emit('deal-hand', hand);
+  });
+
+  io.to(room).emit('game-started');
+
+  dealerIndex[room] = (dealerIndex[room] || 0) % 4;
+  const firstBidderIndex = (dealerIndex[room] + 1) % 4;
+  bidTurnIndex[room] = firstBidderIndex;
+  bids[room] = [];
+
+  io.to(room).emit('bidding-started', {
+    dealer: players[dealerIndex[room]],
+    bids: bids[room]
+  });
+
+  io.to(players[firstBidderIndex].id).emit('your-turn-to-bid');
+}
+
 
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
@@ -115,6 +212,14 @@ io.on('connection', (socket) => {
 
     io.to(room).emit('room-update', { message: `${name} joined room ${room}`, room });
     io.to(room).emit('player-list', rooms[room]);
+
+    if (rooms[room].length === 4) {
+      setTimeout(() => {
+        io.to(room).emit('room-update', { message: 'All players joined. Starting game...', room });
+        startGame(room);
+      }, 300); // slight delay ensures client UI sync
+    }
+
   });
 
   socket.on('get-player-list', (room) => {
@@ -124,39 +229,9 @@ io.on('connection', (socket) => {
   });
 
   socket.on('start-game', (room) => {
-    const players = rooms[room];
-    if (!players || players.length !== 4) {
-      io.to(socket.id).emit('error-message', 'Game requires 4 players to start.');
-      return;
-    }
-
-    const deck = [...fullDeck];
-    for (let i = deck.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [deck[i], deck[j]] = [deck[j], deck[i]];
-    }
-
-    hands[room] = {};
-    players.forEach((player, index) => {
-      const hand = deck.slice(index * 6, (index + 1) * 6);
-      hands[room][player.id] = hand;
-      io.to(player.id).emit('deal-hand', hand);
-    });
-
-    io.to(room).emit('game-started');
-
-    dealerIndex[room] = (dealerIndex[room] || 0) % 4;
-    const firstBidderIndex = (dealerIndex[room] + 1) % 4;
-    bidTurnIndex[room] = firstBidderIndex;
-    bids[room] = [];
-
-    io.to(room).emit('bidding-started', {
-      dealer: players[dealerIndex[room]],
-      bids: bids[room]
-    });
-
-    io.to(players[firstBidderIndex].id).emit('your-turn-to-bid');
+    startGame(room);
   });
+
 
   socket.on('submit-bid', ({ room, amount, trump }) => {
     const players = rooms[room];
@@ -197,7 +272,7 @@ io.on('connection', (socket) => {
         const firstPlayer = (winnerIndex + 1) % 4;
         currentTurnIndex[room] = firstPlayer;
         tricks[room] = [];
-        io.to(players[firstPlayer].id).emit('your-turn-to-play');
+        handleNextTurn(room);
       }
       
     } else {
@@ -262,10 +337,10 @@ io.on('connection', (socket) => {
     if (trickSoFar.length > 0) {
       const trump = winningTrump[room];
       const leadSuit = parseCard(trickSoFar[0].card).suit;
-    
+
       const isTrumpSuit = trump && trump !== 'high' && trump !== 'low';
       const sameColor = { H: 'D', D: 'H', S: 'C', C: 'S' };
-    
+
       const getEffectiveSuit = (card) => {
         const { value, suit } = parseCard(card);
         if (isTrumpSuit && value === 'J') {
@@ -274,19 +349,23 @@ io.on('connection', (socket) => {
         }
         return isTrumpSuit && suit === trump[0].toUpperCase() ? 'TRUMP' : suit;
       };
-    
+
       const requiredSuit = getEffectiveSuit(trickSoFar[0].card);
-      const playedSuit = getEffectiveSuit(card);
-    
-      const hasRequiredSuit = playerHand.some(c => getEffectiveSuit(c) === requiredSuit);
-    
-      if (hasRequiredSuit && playedSuit !== requiredSuit) {
+      const validCards = playerHand.filter(c => getEffectiveSuit(c) === requiredSuit);
+
+      if (validCards.length > 1 && getEffectiveSuit(card) !== requiredSuit) {
         io.to(socket.id).emit('error-message', `You must follow suit: ${requiredSuit}`);
-        if (callback) callback({ success: false }); // 👈 let the front end know to not proceed
+        if (callback) callback({ success: false });
         return;
       }
-      
-    }    
+
+      // 👇 NEW: Auto-play the only valid card if there's just one option
+      if (validCards.length === 1 && getEffectiveSuit(card) !== requiredSuit) {
+        const autoCard = validCards[0];
+        card = autoCard;
+      }
+    }
+
 
     hands[room][socket.id] = playerHand.filter(c => c !== card);
 
@@ -335,28 +414,26 @@ io.on('connection', (socket) => {
         roundTricks[room] = { team1: 0, team2: 0 };
       }
       
-      const team = winnerIndex % 2 === 0 ? 'team1' : 'team2';
-      roundTricks[room][team]++;
-      
       // Check if the round is over (6 tricks total)
       const totalTricks = roundTricks[room].team1 + roundTricks[room].team2;
       if (totalTricks === 6) {
+        // Scoring logic
         const scores = { team1: 0, team2: 0 };
-      
-        const bid = bids[room].find(b => b.id === moonPlayer[room]) || bids[room].find(b => b.amount !== 0);
-        const biddingIndex = players.findIndex(p => p.id === bid.id);
+        const bid = bids[room].find(b => b.amount !== 0);
+        const biddingPlayerId = moonPlayer[room] || bid?.id;
+        const biddingIndex = players.findIndex(p => p.id === biddingPlayerId);
         const biddingTeam = biddingIndex % 2 === 0 ? 'team1' : 'team2';
         const opponentTeam = biddingTeam === 'team1' ? 'team2' : 'team1';
-      
         const tricksWon = roundTricks[room][biddingTeam];
-      
-    if (bid.amount === 'moon') {
+
+        // Apply rules
+        if (moonPlayer[room]) {
           if (tricksWon === 6) {
             scores[biddingTeam] += 4;
           } else {
             scores[opponentTeam] += 2;
           }
-        } else {
+        } else if (bid) {
           if (tricksWon === 6) {
             scores[biddingTeam] += 2;
           } else if (tricksWon >= bid.amount) {
@@ -365,17 +442,59 @@ io.on('connection', (socket) => {
             scores[opponentTeam] += 2;
           }
         }
-      
-        io.to(room).emit('round-score', scores);
-      
-        // Reset for next round (optional)
+
+        // Initialize if not present
+        if (!teamScores[room]) {
+          teamScores[room] = { team1: 0, team2: 0 };
+        }
+
+        // Add round points to total scores
+        teamScores[room].team1 += scores.team1;
+        teamScores[room].team2 += scores.team2;
+
+        // Send updated total scores to clients
+        io.to(room).emit('score-update', teamScores[room]);
+
+        // Reset for next round
         roundTricks[room] = { team1: 0, team2: 0 };
         moonPlayer[room] = null;
+
+        // Rotate dealer
+        dealerIndex[room] = ((dealerIndex[room] || 0) + 1) % 4;
+        const dealer = players[dealerIndex[room]];
+        const firstBidderIndex = (dealerIndex[room] + 1) % 4;
+        bidTurnIndex[room] = firstBidderIndex;
+        bids[room] = [];
+        tricks[room] = [];
+        roundTricks[room] = { team1: 0, team2: 0 };
+        moonPlayer[room] = null;
+        winningTrump[room] = null;
+
+        // Shuffle and deal new hands
+        const deck = [...fullDeck];
+        for (let i = deck.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [deck[i], deck[j]] = [deck[j], deck[i]];
+        }
+
+        hands[room] = {};
+        players.forEach((player, index) => {
+          const hand = deck.slice(index * 6, (index + 1) * 6);
+          hands[room][player.id] = hand;
+          io.to(player.id).emit('deal-hand', hand);
+        });
+
+        // Start new bidding phase
+        io.to(room).emit('bidding-started', {
+          dealer,
+          bids: bids[room]
+        });
+        io.to(players[firstBidderIndex].id).emit('your-turn-to-bid');
       }
       
 
       setTimeout(() => {
-        io.to(players[winnerIndex].id).emit('your-turn-to-play');
+        handleNextTurn(room);
       }, 1500);
     } else {
         let nextTurn = (turnIndex + 1) % 4;
@@ -390,7 +509,7 @@ io.on('connection', (socket) => {
         }
         
         currentTurnIndex[room] = nextTurn;
-        io.to(players[nextTurn].id).emit('your-turn-to-play');
+        handleNextTurn(room);
     }
   });
 

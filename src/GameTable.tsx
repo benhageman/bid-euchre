@@ -30,7 +30,6 @@ const SUIT_SYMBOLS = {
   D: '♦',
 };
 
-
 const getSuitColor = (suit: string) => {
     return suit === 'H' || suit === 'D' ? '!text-red-500' : '!text-black';
   };  
@@ -41,21 +40,29 @@ const getSuitColor = (suit: string) => {
     return { display: `${value}${SUIT_SYMBOLS[suit]}`, colorClass: getSuitColor(suit) };
   };
 
-const trumpRank = (trump: string) => {
-  if (trump === 'high') return 3;
-  if (trump === 'low') return 2;
-  return 1;
-};
+  // Utility function: Trump strength ranking
+  const trumpRank = (trump: string): number => {
+    if (trump === 'low') return 1;
+    if (['clubs', 'diamonds', 'hearts', 'spades'].includes(trump)) return 2;
+    if (trump === 'high') return 3;
+    return 0;
+  };
 
-const isBetterBid = (a: Bid | null, b: Bid) => {
+  // Comparison logic for whether bid `b` is better than current best `a`
+  const isBetterBid = (a: Bid | null, b: Bid): boolean => {
     if (b.amount === 'moon') return true;
     if (a?.amount === 'moon') return false;
-  
+
     if (!a) return true;
-    if (b.amount > a.amount) return true;
-    if (b.amount < a.amount) return false;
-    return trumpRank(b.trump) > trumpRank(a.trump);
+    if (typeof b.amount === 'number' && typeof a.amount === 'number') {
+      if (b.amount > a.amount) return true;
+      if (b.amount < a.amount) return false;
+      return trumpRank(b.trump) > trumpRank(a.trump);
+    }
+
+    return false;
   };
+
   
 
 const GameTable = () => {
@@ -74,12 +81,28 @@ const GameTable = () => {
   const [trickCounts, setTrickCounts] = useState<Record<string, number>>({});
   const [error, setError] = useState<string>('');
   const [moonPlayerId, setMoonPlayerId] = useState<string | null>(null);
+  const [teamScores, setTeamScores] = useState<{ team1: number; team2: number }>({ team1: 0, team2: 0 });
+
 
 
   useEffect(() => {
     socket.on('player-list', (updatedPlayers: Player[]) => {
       setPlayers(updatedPlayers);
     });
+
+    socket.on('auto-play-card', ({ room, card }) => {
+      socket.emit('play-card', { room, card }, (response: { success: boolean }) => {
+        if (response.success) {
+          setHand((prev) => prev.filter((c) => c !== card));
+          setIsMyTurnToPlay(false);
+        }
+      });
+    });
+
+    socket.on('score-update', (scores) => {
+      setTeamScores(scores);
+    });
+
 
     socket.on('deal-hand', (cards: string[]) => {
       setHand(cards);
@@ -89,11 +112,13 @@ const GameTable = () => {
       setGameStarted(true);
     });
 
-    socket.on('bidding-started', ({ bids }) => {
-      setBidding(true);
-      setBids(bids);
-      setBiddingWinner(null);
-    });
+  socket.on('bidding-started', ({ bids }) => {
+    setBidding(true);
+    setBids(bids);
+    setBiddingWinner(null);
+    setTrickCounts({}); // 👈 Reset trick counter for all players
+  });
+
 
     socket.on('bids-updated', (updatedBids: Bid[]) => {
       setBids(updatedBids);
@@ -141,6 +166,12 @@ const GameTable = () => {
         }));
       });
       
+    socket.on('round-score', (scores: { team1: number; team2: number }) => {
+      setTeamScores(prev => ({
+        team1: prev.team1 + scores.team1,
+        team2: prev.team2 + scores.team2,
+      }));
+    });
 
     socket.on('error-message', (msg: string) => {
       setError(msg);
@@ -162,8 +193,10 @@ const GameTable = () => {
       socket.off('trick-updated');
       socket.off('trick-complete');
       socket.off('error-message');
+      socket.off('round-score');
+      socket.off('score-update');
     };
-  }, [roomCode]);
+  }, [roomCode, moonPlayerId, players]);
 
   const handleStartGame = () => {
     socket.emit('start-game', roomCode);
@@ -221,7 +254,9 @@ const GameTable = () => {
   return (
     <div className="min-h-screen bg-green-700 flex flex-col items-center justify-start px-4 py-8 text-white">
       <h1 className="text-3xl font-bold mb-4">Game Room: {roomCode}</h1>
-
+      <div className="mb-4 text-white text-xl font-semibold">
+        Team 1: {teamScores.team1} — Team 2: {teamScores.team2}
+      </div>
       <div className="grid grid-cols-2 gap-6 w-full max-w-3xl mb-6">
         {[0, 1, 2, 3].map((i) => (
             <div
