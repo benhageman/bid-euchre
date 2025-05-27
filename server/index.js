@@ -84,7 +84,6 @@ function trumpRank(trump) {
 function handleNextTurn(room) {
   const players = rooms[room];
   let turnIndex = currentTurnIndex[room];
-  const player = players[turnIndex];
 
   // Skip moon teammate if needed
   if (moonPlayer[room]) {
@@ -99,6 +98,9 @@ function handleNextTurn(room) {
   const currentPlayer = players[turnIndex];
   const hand = hands[room]?.[currentPlayer.id];
   const trickSoFar = tricks[room] || [];
+
+  // ✅ Announce current turn
+  io.to(room).emit('current-turn', currentPlayer.id);
 
   // 🚫 DO NOT auto-play for the first player (they can lead anything)
   if (trickSoFar.length === 0) {
@@ -128,35 +130,73 @@ function handleNextTurn(room) {
   if (matchingCards.length === 1) {
     const card = matchingCards[0];
     console.log(`Auto-playing ${card} for ${currentPlayer.name}`);
+    
+    // Notify room
     io.to(room).emit('room-update', {
       message: `${currentPlayer.name} auto-played ${card}`,
       room
     });
 
-    // Let the server play the card like normal
-    io.to(currentPlayer.id).emit('auto-play-card', { room, card });
+    // Update hand
+    hands[room][currentPlayer.id] = hand.filter(c => c !== card);
+    io.to(currentPlayer.id).emit('deal-hand', hands[room][currentPlayer.id]);
+
+    // Add to trick
+    tricks[room] = tricks[room] || [];
+    tricks[room].push({ id: currentPlayer.id, name: currentPlayer.name, card });
+
+    // Notify all clients of updated trick
+    io.to(room).emit('trick-updated', tricks[room]);
+
+    // Return to allow play-card logic to handle end-of-trick or next player
     return;
   }
 
-  // Otherwise, let them pick
+  // 🟡 Let the player choose a card
   io.to(currentPlayer.id).emit('your-turn-to-play');
 }
 
 
+
 function isBetterBid(newBid, currentBid) {
-    if (!currentBid) return true;
-  
-    // Moon always wins
-    if (newBid.amount === 'moon') return true;
-    if (currentBid.amount === 'moon') return false;
-  
-    if (newBid.amount > currentBid.amount) return true;
-    if (newBid.amount < currentBid.amount) return false;
-  
-    return trumpRank(newBid.trump) > trumpRank(currentBid.trump);
+  if (!currentBid) return true;
+
+  // Moon always wins
+  if (newBid.amount === 'moon') return true;
+  if (currentBid.amount === 'moon') return false;
+
+  const newAmt = newBid.amount;
+  const curAmt = currentBid.amount;
+  const newTrump = newBid.trump;
+  const curTrump = currentBid.trump;
+
+  // If new bid has higher number
+  if (typeof newAmt === "number" && typeof curAmt === "number") {
+    if (newAmt > curAmt) return true;
+
+    // Same amount
+    if (newAmt === curAmt) {
+      // "high" can always upbid
+      if (newTrump === "high" && curTrump !== "high") return true;
+
+      // suit can beat "low"
+      const suits = ["spades", "hearts", "diamonds", "clubs"];
+      if (suits.includes(newTrump) && curTrump === "low") return true;
+
+      // everything else = invalid upbid
+      return false;
+    }
+
+    return false;
   }
+
+  return false;
+}
+
+
   
   function startGame(room) {
+  console.log(`🎮 startGame called for room ${room}`);
   const players = rooms[room];
   if (!players || players.length !== 4) return;
 
@@ -181,6 +221,10 @@ function isBetterBid(newBid, currentBid) {
   bids[room] = [];
 
   io.to(room).emit('bidding-started', {
+    dealer: players[dealerIndex[room]],
+    bids: bids[room]
+  });
+  console.log("🔥 Bidding started", {
     dealer: players[dealerIndex[room]],
     bids: bids[room]
   });
@@ -368,6 +412,8 @@ io.on('connection', (socket) => {
 
 
     hands[room][socket.id] = playerHand.filter(c => c !== card);
+    io.to(socket.id).emit('deal-hand', hands[room][socket.id]); // <-- update client hand
+
 
     tricks[room] = tricks[room] || [];
     tricks[room].push({ id: socket.id, name: currentPlayer.name, card });

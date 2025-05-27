@@ -1,36 +1,42 @@
-import React, { useState, useEffect } from 'react';
+// src/Lobby.tsx
+import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { socket } from './socket'; // ✅ Use shared socket
+import { SocketContext } from './App'; // 👈 Import context
 
 const Lobby = () => {
   const [name, setName] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [status, setStatus] = useState('');
 
+  const { socket } = useContext(SocketContext); // 👈 Use context
   const navigate = useNavigate();
 
   const handleHostGame = () => {
     const room = roomCode || Math.random().toString(36).substring(2, 8).toUpperCase();
-    if (!name) return;
+    if (!name || !socket) return;
     socket.emit('host', { name, room });
   };
 
   const handleJoinGame = () => {
-    if (!name || !roomCode) return;
+    if (!name || !roomCode || !socket) return;
     socket.emit('join', { name, room: roomCode });
   };
 
   useEffect(() => {
-    socket.on('room-update', (data) => {
+    if (!socket) return;
+
+    const onRoomUpdate = (data: { message: string; room: string }) => {
       setStatus(data.message);
       setRoomCode(data.room);
       navigate(`/game/${data.room}`);
-    });
+    };
+
+    socket.on('room-update', onRoomUpdate);
 
     return () => {
-      socket.off('room-update');
+      socket.off('room-update', onRoomUpdate);
     };
-  }, [navigate]);
+  }, [socket, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
