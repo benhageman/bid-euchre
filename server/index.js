@@ -194,7 +194,60 @@ function isBetterBid(newBid, currentBid) {
 }
 
 
+function sortHand(hand) {
+  const suitColors = {
+    H: 'red',
+    D: 'red',
+    S: 'black',
+    C: 'black'
+  };
+
+  const cardRank = {
+    A: 0,
+    K: 1,
+    Q: 2,
+    J: 3,
+    '10': 4,
+    '9': 5
+  };
+
+  const suitGroups = {
+    H: [],
+    D: [],
+    S: [],
+    C: []
+  };
+
+  hand.forEach(card => {
+    const value = card.slice(0, -1);
+    const suit = card.slice(-1);
+    suitGroups[suit].push({ card, rank: cardRank[value] });
+  });
+
+  for (const suit in suitGroups) {
+    suitGroups[suit].sort((a, b) => a.rank - b.rank);
+  }
+
+  // Alternate red-black
+  const suits = ['H', 'D', 'S', 'C'];
+  const presentSuits = suits.filter(s => suitGroups[s].length > 0);
+
+  const redSuits = presentSuits.filter(s => suitColors[s] === 'red');
+  const blackSuits = presentSuits.filter(s => suitColors[s] === 'black');
+
+  const orderedSuits = [];
+  while (redSuits.length || blackSuits.length) {
+    if (redSuits.length) orderedSuits.push(redSuits.shift());
+    if (blackSuits.length) orderedSuits.push(blackSuits.shift());
+  }
+
+  // Flatten the sorted hand
+  const sortedHand = orderedSuits.flatMap(suit => suitGroups[suit].map(c => c.card));
+
+  return sortedHand;
+}
   
+
   function startGame(room) {
   console.log(`🎮 startGame called for room ${room}`);
   const players = rooms[room];
@@ -208,9 +261,10 @@ function isBetterBid(newBid, currentBid) {
 
   hands[room] = {};
   players.forEach((player, index) => {
-    const hand = deck.slice(index * 6, (index + 1) * 6);
-    hands[room][player.id] = hand;
-    io.to(player.id).emit('deal-hand', hand);
+  const hand = deck.slice(index * 6, (index + 1) * 6);
+  const sortedHand = sortHand(hand); // 🔁 Sort it here
+  hands[room][player.id] = sortedHand;
+  io.to(player.id).emit('deal-hand', sortedHand);
   });
 
   io.to(room).emit('game-started');
