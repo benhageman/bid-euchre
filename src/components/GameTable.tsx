@@ -66,7 +66,7 @@ const GameTable: React.FC<Props> = ({
   const rightPlayer = rotated[3];
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-green-800 text-white overflow-hidden p-1">
+    <div className="flex flex-col full-mobile-height w-screen bg-green-800 text-white overflow-hidden p-1">
       {/* Top Bar / Score */}
       <div className="flex justify-center items-center py-1">
         <ScoreBoard scores={teamScores} winningBid={winningBid || undefined} />
@@ -78,7 +78,10 @@ const GameTable: React.FC<Props> = ({
           <PlayerArea
             name={topPlayer.name}
             tricks={tricksWon[topPlayer.id] || 0}
-            isCurrentTurn={currentTurnId === topPlayer.id && !playedThisTrick.has(topPlayer.id)}
+            isCurrentTurn={
+              currentTurnId === topPlayer.id &&
+              !playedThisTrick.has(topPlayer.id)
+            }
           />
         </div>
       )}
@@ -91,7 +94,10 @@ const GameTable: React.FC<Props> = ({
             <PlayerArea
               name={leftPlayer.name}
               tricks={tricksWon[leftPlayer.id] || 0}
-              isCurrentTurn={currentTurnId === leftPlayer.id && !playedThisTrick.has(leftPlayer.id)}
+              isCurrentTurn={
+                currentTurnId === leftPlayer.id &&
+                !playedThisTrick.has(leftPlayer.id)
+              }
               vertical
             />
           </div>
@@ -113,7 +119,10 @@ const GameTable: React.FC<Props> = ({
             <PlayerArea
               name={rightPlayer.name}
               tricks={tricksWon[rightPlayer.id] || 0}
-              isCurrentTurn={currentTurnId === rightPlayer.id && !playedThisTrick.has(rightPlayer.id)}
+              isCurrentTurn={
+                currentTurnId === rightPlayer.id &&
+                !playedThisTrick.has(rightPlayer.id)
+              }
               vertical
             />
           </div>
@@ -126,7 +135,10 @@ const GameTable: React.FC<Props> = ({
           <PlayerArea
             name={bottomPlayer.name || "You"}
             tricks={tricksWon[bottomPlayer.id] || 0}
-            isCurrentTurn={currentTurnId === bottomPlayer.id && !playedThisTrick.has(bottomPlayer.id)}
+            isCurrentTurn={
+              currentTurnId === bottomPlayer.id &&
+              !playedThisTrick.has(bottomPlayer.id)
+            }
           />
         )}
 

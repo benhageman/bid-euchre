@@ -18,12 +18,27 @@ function App() {
 
   // Setup socket connection once on mount
   useEffect(() => {
-    //const newSocket = io('wss://bid-euchre.roomBids.com');
+    //const newSocket = io('http://localhost:3001'); // Change if using remote server
     const newSocket = io('wss://bid-euchre-4ehv.onrender.com');
-//    const newSocket = io('http://localhost:3001');
     setSocket(newSocket);
     return () => {
       newSocket.disconnect();
+    };
+  }, []);
+
+  // ✅ Set --app-height to avoid mobile scroll bugs
+  useEffect(() => {
+    const setAppHeight = () => {
+      document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+    };
+
+    setAppHeight();
+    window.addEventListener('resize', setAppHeight);
+    window.addEventListener('orientationchange', setAppHeight);
+
+    return () => {
+      window.removeEventListener('resize', setAppHeight);
+      window.removeEventListener('orientationchange', setAppHeight);
     };
   }, []);
 
