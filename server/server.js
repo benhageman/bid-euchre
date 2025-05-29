@@ -100,6 +100,7 @@ function handleNextTurn(room) {
 
   // ✅ Announce current turn
   io.to(room).emit('current-turn', currentPlayer.id);
+  console.log('🔧 Starting server...');
 
   // 🚫 DO NOT auto-play for the first player (they can lead anything)
   if (trickSoFar.length === 0) {
@@ -272,7 +273,7 @@ function sortHand(hand) {
   dealerIndex[room] = (dealerIndex[room] || 0) % 4;
   const firstBidderIndex = (dealerIndex[room] + 1) % 4;
   bidTurnIndex[room] = firstBidderIndex;
-  bids[room] = [];
+  bids[room] = [null, null, null, null];
 
   io.to(room).emit('bidding-started', {
     dealer: players[dealerIndex[room]],
@@ -335,6 +336,8 @@ io.on('connection', (socket) => {
     const players = rooms[room];
     const turnIndex = bidTurnIndex[room];
     const currentPlayer = players[turnIndex];
+    console.log(`📨 Received bid from ${socket.id} (${currentPlayer?.name}) — amount: ${amount}, trump: ${trump}`);
+    console.log(`Current bids for room ${room}:`, bids[room]);
 
     const newBid = {
         id: currentPlayer.id,
@@ -345,9 +348,8 @@ io.on('connection', (socket) => {
     bids[room][turnIndex] = newBid;
     io.to(room).emit('bids-updated', bids[room]);
 
-    bidTurnIndex[room] = (turnIndex + 1) % 4;
-
-    if (bids[room].length >= 4) {
+    if (bids[room].filter(b => b !== null).length >= 4) {
+      console.log('✅ All bids in. Ending bidding phase...');
       const validBids = bids[room].filter(b => b.amount !== 0);
       const winningBid = validBids.reduce((best, bid) => isBetterBid(bid, best) ? bid : best, null);
       io.to(room).emit('bidding-complete', { winner: winningBid });
@@ -365,6 +367,7 @@ io.on('connection', (socket) => {
       }
       
     } else {
+      bidTurnIndex[room] = (turnIndex + 1) % 4;
       const nextPlayer = players[bidTurnIndex[room]];
       io.to(nextPlayer.id).emit('your-turn-to-bid');
     }
