@@ -101,7 +101,7 @@ const GameTable: React.FC<Props> = ({
         <div className="flex-1 flex items-center justify-center bg-green-900 rounded-md border border-white p-2 min-w-0">
           <Trick
             trick={trickCards}
-            players={players}
+            players={rotated}
             bidding={biddingActive}
             bids={bids}
           />
