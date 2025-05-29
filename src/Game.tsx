@@ -132,9 +132,13 @@ const Game: React.FC = () => {
     socket.on("score-update", onScoreUpdate);
     socket.on("bidding-started", ({ dealer, bids }) => {
         console.log("🟡 Bidding started:", dealer);
+        setDealer(dealer);
         setBids(bids);
-        setIsMyBidTurn(false); // will turn true when your turn arrives
-    });
+        setWinningBid(null);      // ✅ clear previous winner
+        setIsBidding(true);       // ✅ show bidding panel
+        setIsMyBidTurn(false);
+        });
+
     socket.on("your-turn-to-bid", () => {
         console.log("🟢 It's your turn to bid");
         setIsMyBidTurn(true);
@@ -173,44 +177,40 @@ const Game: React.FC = () => {
   };
 
     return (
-    <>
-        {isBidding && (
-        <div className="flex flex-col items-center gap-4 p-4 bg-green-700 text-white">
-            <BidDisplay bids={bids} />
-            {isMyBidTurn && (
-            <BidPanel
-                currentHighestBid={bids.find(b => b.amount !== 0) || null}
-                onSubmitBid={(bid) => {
-                    socket?.emit("submit-bid", { room: roomCode, ...bid });
-                    setIsMyBidTurn(false); // ✅ hide the BidPanel after user bids/passes
-                }}
+  <>
+    {/* BidPanel only when it's your turn during bidding */}
+    {isBidding && isMyBidTurn && (
+      <div className="flex justify-center bg-green-900 py-2 px-4 text-white">
+        <BidPanel
+            currentHighestBid={bids.find(b => b && b.amount !== 0) || null}
+            onSubmitBid={(bid) => {
+                socket?.emit("submit-bid", { room: roomCode, ...bid });
+                setIsMyBidTurn(false);
+            }}
             />
 
-            )}
-        </div>
-        )}
+      </div>
+    )}
 
-        {!isBidding && winningBid && (
-        <div className="text-center text-white bg-green-900 py-2 px-4 rounded shadow mb-2">
-            🏆 <strong>{winningBid.name}</strong> won the bid with{" "}
-            <strong>{winningBid.amount === "moon" ? "Moon" : `${winningBid.amount} ${winningBid.trump}`}</strong>
-        </div>
-        )}
+    {/* Main Game UI */}
+    <GameTable
+      players={players}
+      currentTurnId={currentTurnId || ""}
+      teamScores={teamScores}
+      tricksWon={tricksWon}
+      trickCards={trick}
+      hand={hand}
+      onPlayCard={handlePlayCard}
+      isMyTurn={currentTurnId === (socket?.id ?? "")}
+      youId={myId || ""}
+      playedThisTrick={playedThisTrick}
+      biddingActive={isBidding}
+      bids={bids}
+      winningBid={winningBid}
+    />
+  </>
+);
 
-        <GameTable
-        players={players}
-        currentTurnId={currentTurnId || ""}
-        teamScores={teamScores}
-        tricksWon={tricksWon}
-        trickCards={trick}
-        hand={hand}
-        onPlayCard={handlePlayCard}
-        isMyTurn={currentTurnId === (socket?.id ?? "")}
-        youId={myId || ""}
-        playedThisTrick={playedThisTrick}
-        />
-    </>
-    );
 
 
 };

@@ -4,6 +4,7 @@ import ScoreBoard from "./ScoreBoard";
 import PlayerArea from "./PlayerArea";
 import Trick from "./Trick";
 import Hand from "./Hand";
+import { BidAmount, TrumpType } from "../types/BidTypes";
 
 type Player = {
   id: string;
@@ -13,6 +14,12 @@ type Player = {
 type TrickCard = {
   id: string;
   card: string;
+};
+
+type Bid = {
+  name: string;
+  amount: BidAmount;
+  trump: TrumpType;
 };
 
 type Props = {
@@ -26,6 +33,9 @@ type Props = {
   isMyTurn: boolean;
   youId: string;
   playedThisTrick: Set<string>;
+  biddingActive?: boolean;
+  bids?: Bid[];
+  winningBid?: Bid | null;
 };
 
 const GameTable: React.FC<Props> = ({
@@ -39,69 +49,79 @@ const GameTable: React.FC<Props> = ({
   isMyTurn,
   youId,
   playedThisTrick,
+  biddingActive,
+  bids,
+  winningBid,
 }) => {
-    const myIndex = players.findIndex(p => p.id === youId);
-    const rotated = [...players];
-
-    if (myIndex > 0) {
+  const myIndex = players.findIndex((p) => p.id === youId);
+  const rotated = [...players];
+  if (myIndex > 0) {
     const cut = rotated.splice(0, myIndex);
     rotated.push(...cut);
-    }
+  }
 
-    const bottomPlayer = rotated[0]; // You
-    const topPlayer = rotated[2];    // Opposite
-    const leftPlayer = rotated[1];   // Left
-    const rightPlayer = rotated[3];  // Right
-
+  const bottomPlayer = rotated[0];
+  const topPlayer = rotated[2];
+  const leftPlayer = rotated[1];
+  const rightPlayer = rotated[3];
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-green-800 text-white p-2 overflow-hidden">
-      <ScoreBoard scores={teamScores} />
+    <div className="flex flex-col h-screen w-screen bg-green-800 text-white overflow-hidden p-1">
+      {/* Top Bar / Score */}
+      <div className="flex justify-center items-center py-1">
+        <ScoreBoard scores={teamScores} winningBid={winningBid || undefined} />
+      </div>
 
       {/* Top Player */}
-      <div className="flex justify-center mt-2">
-        {topPlayer && (
+      {topPlayer && (
+        <div className="flex justify-center items-center py-1">
           <PlayerArea
             name={topPlayer.name}
             tricks={tricksWon[topPlayer.id] || 0}
             isCurrentTurn={currentTurnId === topPlayer.id && !playedThisTrick.has(topPlayer.id)}
           />
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="flex flex-1 justify-between items-center mt-2 mb-2">
+      {/* Middle layout: Left - Trick - Right */}
+      <div className="flex flex-1 justify-around items-center px-1 gap-1">
         {/* Left Player */}
-        <div className="w-1/5">
-          {leftPlayer && (
+        {leftPlayer && (
+          <div className="flex-1 max-w-[70px]">
             <PlayerArea
               name={leftPlayer.name}
               tricks={tricksWon[leftPlayer.id] || 0}
               isCurrentTurn={currentTurnId === leftPlayer.id && !playedThisTrick.has(leftPlayer.id)}
               vertical
             />
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Trick in Center */}
-        <div className="flex-1 flex items-center justify-center bg-green-900 rounded-lg border border-white p-4">
-          <Trick trick={trickCards} players={players} />
+        {/* Trick or Bidding Area */}
+        <div className="flex-1 flex items-center justify-center bg-green-900 rounded-md border border-white p-2 min-w-0">
+          <Trick
+            trick={trickCards}
+            players={players}
+            bidding={biddingActive}
+            bids={bids}
+          />
         </div>
 
         {/* Right Player */}
-        <div className="w-1/5">
-          {rightPlayer && (
+        {rightPlayer && (
+          <div className="flex-1 max-w-[70px]">
             <PlayerArea
               name={rightPlayer.name}
               tricks={tricksWon[rightPlayer.id] || 0}
               isCurrentTurn={currentTurnId === rightPlayer.id && !playedThisTrick.has(rightPlayer.id)}
               vertical
             />
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom Player and Hand */}
-      <div className="flex flex-col items-center">
+      <div className="flex flex-col items-center pt-1 pb-2">
         {bottomPlayer && (
           <PlayerArea
             name={bottomPlayer.name || "You"}
@@ -109,7 +129,8 @@ const GameTable: React.FC<Props> = ({
             isCurrentTurn={currentTurnId === bottomPlayer.id && !playedThisTrick.has(bottomPlayer.id)}
           />
         )}
-        <div className="mt-2 w-full max-w-xl">
+
+        <div className="w-full px-1 overflow-hidden">
           <Hand
             hand={hand}
             onPlayCard={onPlayCard}

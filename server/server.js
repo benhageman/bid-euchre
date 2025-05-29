@@ -27,7 +27,6 @@ const roundTricks = {}; // room => { team1: number, team2: number }
 const totalScores = {}; // room => { team1: number, team2: number }
 const teamScores = {}; // room => { team1: number, team2: number }
 
-
 const fullDeck = [
   '9C', '9D', '9H', '9S',
   '10C', '10D', '10H', '10S',
@@ -126,31 +125,31 @@ function handleNextTurn(room) {
   const requiredSuit = getEffectiveSuit(trickSoFar[0].card);
   const matchingCards = hand.filter((c) => getEffectiveSuit(c) === requiredSuit);
 
-  // ✅ Auto-play only if exactly one matching card is available
-  if (matchingCards.length === 1) {
-    const card = matchingCards[0];
-    console.log(`Auto-playing ${card} for ${currentPlayer.name}`);
+  // // ✅ Auto-play only if exactly one matching card is available
+  // if (matchingCards.length === 1) {
+  //   const card = matchingCards[0];
+  //   console.log(`Auto-playing ${card} for ${currentPlayer.name}`);
     
-    // Notify room
-    io.to(room).emit('room-update', {
-      message: `${currentPlayer.name} auto-played ${card}`,
-      room
-    });
+  //   // Notify room
+  //   io.to(room).emit('room-update', {
+  //     message: `${currentPlayer.name} auto-played ${card}`,
+  //     room
+  //   });
 
-    // Update hand
-    hands[room][currentPlayer.id] = hand.filter(c => c !== card);
-    io.to(currentPlayer.id).emit('deal-hand', hands[room][currentPlayer.id]);
+  //   // Update hand
+  //   hands[room][currentPlayer.id] = hand.filter(c => c !== card);
+  //   io.to(currentPlayer.id).emit('deal-hand', hands[room][currentPlayer.id]);
 
-    // Add to trick
-    tricks[room] = tricks[room] || [];
-    tricks[room].push({ id: currentPlayer.id, name: currentPlayer.name, card });
+  //   // Add to trick
+  //   tricks[room] = tricks[room] || [];
+  //   tricks[room].push({ id: currentPlayer.id, name: currentPlayer.name, card });
 
-    // Notify all clients of updated trick
-    io.to(room).emit('trick-updated', tricks[room]);
-
-    // Return to allow play-card logic to handle end-of-trick or next player
-    return;
-  }
+  //   // Notify all clients of updated trick
+  //   io.to(room).emit('trick-updated', tricks[room]);
+  //   console.log(`Auto play function 1`);
+  //   // Return to allow play-card logic to handle end-of-trick or next player
+  //   return;
+  // }
 
   // 🟡 Let the player choose a card
   io.to(currentPlayer.id).emit('your-turn-to-play');
@@ -250,6 +249,7 @@ function sortHand(hand) {
 
   function startGame(room) {
   console.log(`🎮 startGame called for room ${room}`);
+  bids[room] = [null, null, null, null];
   const players = rooms[room];
   if (!players || players.length !== 4) return;
 
@@ -336,22 +336,13 @@ io.on('connection', (socket) => {
     const turnIndex = bidTurnIndex[room];
     const currentPlayer = players[turnIndex];
 
-    const isFourthBid = bids[room].length === 3;
-    const firstThreePassed = bids[room].every(b => b.amount === 0);
-    const tryingToPass = amount === 0;
-
-    if (isFourthBid && firstThreePassed && tryingToPass) {
-      io.to(currentPlayer.id).emit('error-message', 'You must place a bid — all others passed.');
-      return;
-    }
-
     const newBid = {
         id: currentPlayer.id,
         name: currentPlayer.name,
         amount: amount === 'moon' ? 'moon' : Number(amount),
         trump
     };
-    bids[room].push(newBid);
+    bids[room][turnIndex] = newBid;
     io.to(room).emit('bids-updated', bids[room]);
 
     bidTurnIndex[room] = (turnIndex + 1) % 4;
@@ -458,10 +449,12 @@ io.on('connection', (socket) => {
       }
 
       // 👇 NEW: Auto-play the only valid card if there's just one option
-      if (validCards.length === 1 && getEffectiveSuit(card) !== requiredSuit) {
-        const autoCard = validCards[0];
-        card = autoCard;
-      }
+      // if (validCards.length === 1 && getEffectiveSuit(card) !== requiredSuit) {
+      //   const autoCard = validCards[0];
+      //   card = autoCard;
+      //       console.log(`Auto play function 2`);
+
+      // }
     }
 
 
@@ -564,7 +557,7 @@ io.on('connection', (socket) => {
         const dealer = players[dealerIndex[room]];
         const firstBidderIndex = (dealerIndex[room] + 1) % 4;
         bidTurnIndex[room] = firstBidderIndex;
-        bids[room] = [];
+        bids[room] = [null, null, null, null];
         tricks[room] = [];
         roundTricks[room] = { team1: 0, team2: 0 };
         moonPlayer[room] = null;

@@ -9,7 +9,7 @@ type Bid = {
 };
 
 type Props = {
-  bids: (Bid | null)[];
+  bids: (Bid | null | undefined)[]; // accepts null or missing
 };
 
 const trumpMap: Record<string, { emoji: string; color: string }> = {
@@ -27,15 +27,20 @@ const BidDisplay: React.FC<Props> = ({ bids }) => {
       <h3 className="font-bold text-lg mb-2">Bids</h3>
       <ul className="space-y-1">
         {bids.map((bid, index) => {
-          if (!bid || bid.amount === 0) {
+          if (!bid || !("amount" in bid)) {
+            return null; // ✅ Skip uninitialized or malformed entries
+          }
+
+          if (bid.amount === 0) {
             return (
               <li key={index} className="text-gray-400">
-                Player {index + 1} passed
+                {bid.name} passed
               </li>
             );
           }
 
-          const { emoji, color } = trumpMap[bid.trump] || {};
+          const { emoji, color } = trumpMap[bid.trump] || { emoji: "", color: "" };
+
           return (
             <li key={index} className="flex gap-2 items-center">
               <span className="font-semibold">{bid.name}:</span>
