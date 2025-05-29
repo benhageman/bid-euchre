@@ -18,7 +18,9 @@ function App() {
 
   // Setup socket connection once on mount
   useEffect(() => {
-    const newSocket = io('wss://bid-euchre.onrender.com');
+    //const newSocket = io('wss://bid-euchre.roomBids.com');
+    const newSocket = io('wss://bid-euchre-4ehv.onrender.com');
+//    const newSocket = io('http://localhost:3001');
     setSocket(newSocket);
     return () => {
       newSocket.disconnect();
