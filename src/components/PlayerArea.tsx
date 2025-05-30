@@ -40,7 +40,8 @@ const PlayerArea: React.FC<Props> = ({
       ? `🌙 ${trumpMap[bid.trump] || ""}`
       : `Bid: ${bid.amount} ${trumpMap[bid.trump] || ""}`);
 
-  const borderColor = team === 1 ? "border-red-400" : team === 2 ? "border-blue-400" : "border-gray-400";
+  const borderColor =
+    team === 1 ? "border-red-400" : team === 2 ? "border-blue-400" : "border-gray-400";
 
   return (
     <div
@@ -66,11 +67,6 @@ const PlayerArea: React.FC<Props> = ({
           {name}
         </div>
         <div className="text-sm text-gray-300">Tricks: {tricks}</div>
-        {team && (
-          <div className="text-xs text-gray-300">
-            Team {team}
-          </div>
-        )}
       </div>
 
       {/* Bid below box for left/right players */}
