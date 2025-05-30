@@ -1,4 +1,3 @@
-// src/components/Trick.tsx
 import React from "react";
 import { formatCard } from "../utils/formatCard";
 import clsx from "clsx";

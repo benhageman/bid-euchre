@@ -100,7 +100,7 @@ const GameTable: React.FC<Props> = ({
         )}
 
         {/* Trick or Bidding Area */}
-        <div className="flex-1 flex items-center justify-center bg-green-900 rounded-md border border-white p-2 min-w-0">
+        <div className="flex-1 flex items-center justify-center min-w-0">
           <Trick
             trick={trickCards}
             players={rotated}
