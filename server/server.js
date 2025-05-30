@@ -445,7 +445,7 @@ io.on('connection', (socket) => {
       const requiredSuit = getEffectiveSuit(trickSoFar[0].card);
       const validCards = playerHand.filter(c => getEffectiveSuit(c) === requiredSuit);
 
-      if (validCards.length > 1 && getEffectiveSuit(card) !== requiredSuit) {
+      if (validCards.length > 0 && getEffectiveSuit(card) !== requiredSuit) {
         io.to(socket.id).emit('error-message', `You must follow suit: ${requiredSuit}`);
         if (callback) callback({ success: false });
         return;

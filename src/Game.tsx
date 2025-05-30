@@ -176,6 +176,29 @@ const Game: React.FC = () => {
     }
   };
 
+  const getEffectiveSuit = (card: string, trump: TrumpType) => {
+  const value = card.slice(0, -1);
+  const suit = card.slice(-1);
+  const sameColor: Record<string, string> = { H: "D", D: "H", S: "C", C: "S" };
+
+  if (trump && trump !== "high" && trump !== "low") {
+    if (value === "J" && suit === trump[0].toUpperCase()) return "TRUMP";
+    if (value === "J" && suit === sameColor[trump[0].toUpperCase()]) return "TRUMP";
+    if (suit === trump[0].toUpperCase()) return "TRUMP";
+  }
+  return suit;
+};
+    const playableCards = (() => {
+    if (!hand.length || !winningBid || trick.length === 0 || currentTurnId !== myId) {
+        return hand;
+    }
+
+    const leadSuit = getEffectiveSuit(trick[0].card, winningBid.trump);
+    const matching = hand.filter((c) => getEffectiveSuit(c, winningBid.trump) === leadSuit);
+    return matching.length > 0 ? matching : hand;
+    })();
+
+
     return (
   <>
     {/* BidPanel only when it's your turn during bidding */}
@@ -206,6 +229,7 @@ const Game: React.FC = () => {
       playedThisTrick={playedThisTrick}
       bids={bids}
       winningBid={winningBid}
+      playableCards={playableCards}
     />
   </>
 );
