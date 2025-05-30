@@ -67,14 +67,18 @@ const GameTable: React.FC<Props> = ({
   const leftPlayer = rotated[1];
   const rightPlayer = rotated[3];
 
+  // 🟦 Determine team based on index
+  const getTeam = (playerId: string) => {
+    const index = players.findIndex((p) => p.id === playerId);
+    return index % 2 === 0 ? 1 : 2;
+  };
+
   return (
     <div className="flex flex-col full-mobile-height w-screen bg-green-800 text-white overflow-hidden p-1">
-      {/* Top Bar / Score */}
       <div className="flex justify-center items-center py-1">
         <ScoreBoard scores={teamScores} winningBid={winningBid || undefined} />
       </div>
 
-      {/* Top Player */}
       {topPlayer && (
         <div className="flex justify-center items-center py-1">
           <PlayerArea
@@ -82,50 +86,43 @@ const GameTable: React.FC<Props> = ({
             tricks={tricksWon[topPlayer.id] || 0}
             isCurrentTurn={currentTurnId === topPlayer.id && !playedThisTrick.has(topPlayer.id)}
             bid={bids?.find(b => b?.name === topPlayer.name) || null}
+            team={getTeam(topPlayer.id)}
           />
-
         </div>
       )}
 
-      {/* Middle layout: Left - Trick - Right */}
       <div className="flex flex-1 justify-around items-center px-1 gap-1">
-        {/* Left Player */}
         {leftPlayer && (
           <div className="flex-1 max-w-[70px]">
             <PlayerArea
-                name={leftPlayer.name}
-                tricks={tricksWon[leftPlayer.id] || 0}
-                isCurrentTurn={currentTurnId === leftPlayer.id && !playedThisTrick.has(leftPlayer.id)}
-                vertical
-                bid={bids?.find(b => b?.name === leftPlayer.name) || null}
+              name={leftPlayer.name}
+              tricks={tricksWon[leftPlayer.id] || 0}
+              isCurrentTurn={currentTurnId === leftPlayer.id && !playedThisTrick.has(leftPlayer.id)}
+              vertical
+              bid={bids?.find(b => b?.name === leftPlayer.name) || null}
+              team={getTeam(leftPlayer.id)}
             />
           </div>
         )}
 
-        {/* Trick or Bidding Area */}
         <div className="flex-1 flex items-center justify-center min-w-0">
-          <Trick
-            trick={trickCards}
-            players={rotated}
-          />
+          <Trick trick={trickCards} players={rotated} />
         </div>
 
-        {/* Right Player */}
         {rightPlayer && (
           <div className="flex-1 max-w-[70px]">
             <PlayerArea
-                name={rightPlayer.name}
-                tricks={tricksWon[rightPlayer.id] || 0}
-                isCurrentTurn={currentTurnId === rightPlayer.id && !playedThisTrick.has(rightPlayer.id)}
-                vertical
-                bid={bids?.find(b => b?.name === rightPlayer.name) || null}
+              name={rightPlayer.name}
+              tricks={tricksWon[rightPlayer.id] || 0}
+              isCurrentTurn={currentTurnId === rightPlayer.id && !playedThisTrick.has(rightPlayer.id)}
+              vertical
+              bid={bids?.find(b => b?.name === rightPlayer.name) || null}
+              team={getTeam(rightPlayer.id)}
             />
-
           </div>
         )}
       </div>
 
-      {/* Bottom Player and Hand */}
       <div className="flex flex-col items-center pt-1 pb-2">
         {bottomPlayer && (
           <PlayerArea
@@ -133,8 +130,8 @@ const GameTable: React.FC<Props> = ({
             tricks={tricksWon[bottomPlayer.id] || 0}
             isCurrentTurn={currentTurnId === bottomPlayer.id && !playedThisTrick.has(bottomPlayer.id)}
             bid={bids?.find(b => b?.name === bottomPlayer.name) || null}
-        />
-
+            team={getTeam(bottomPlayer.id)}
+          />
         )}
 
         <div className="w-full px-1 overflow-hidden">

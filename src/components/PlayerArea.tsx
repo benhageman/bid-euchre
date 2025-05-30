@@ -12,6 +12,7 @@ type Props = {
   isCurrentTurn: boolean;
   vertical?: boolean;
   bid?: Bid | null;
+  team?: number;
 };
 
 const trumpMap: Record<string, string> = {
@@ -29,6 +30,7 @@ const PlayerArea: React.FC<Props> = ({
   isCurrentTurn,
   vertical = false,
   bid = null,
+  team,
 }) => {
   const bidDisplay =
     bid &&
@@ -37,6 +39,8 @@ const PlayerArea: React.FC<Props> = ({
       : bid.amount === "moon"
       ? `🌙 ${trumpMap[bid.trump] || ""}`
       : `Bid: ${bid.amount} ${trumpMap[bid.trump] || ""}`);
+
+  const borderColor = team === 1 ? "border-red-400" : team === 2 ? "border-blue-400" : "border-gray-400";
 
   return (
     <div
@@ -53,13 +57,20 @@ const PlayerArea: React.FC<Props> = ({
       <div
         className={clsx(
           "flex items-center justify-center p-2 border rounded-lg bg-green-700 text-white shadow",
-          vertical ? "flex-col space-y-1" : "flex-row space-x-2"
+          vertical ? "flex-col space-y-1" : "flex-row space-x-2",
+          borderColor,
+          isCurrentTurn && "ring-2 ring-yellow-300 animate-pulse"
         )}
       >
         <div className={clsx("font-bold", isCurrentTurn && "text-yellow-300")}>
           {name}
         </div>
         <div className="text-sm text-gray-300">Tricks: {tricks}</div>
+        {team && (
+          <div className="text-xs text-gray-300">
+            Team {team}
+          </div>
+        )}
       </div>
 
       {/* Bid below box for left/right players */}
