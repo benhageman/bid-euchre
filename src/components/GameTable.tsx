@@ -36,6 +36,7 @@ type Props = {
   winningBid?: Bid | null;
   bids?: Bid[];
   playableCards: string[];
+  isBidding: boolean;
 };
 
 const GameTable: React.FC<Props> = ({
@@ -52,6 +53,7 @@ const GameTable: React.FC<Props> = ({
   bids,
   winningBid,
   playableCards,
+  isBidding,
 }) => {
   const myIndex = players.findIndex((p) => p.id === youId);
   const rotated = [...players];
@@ -139,7 +141,7 @@ const GameTable: React.FC<Props> = ({
           <Hand
             hand={hand}
             onPlayCard={onPlayCard}
-            canPlay={isMyTurn}
+            canPlay={isMyTurn && !isBidding}
             playableCards={playableCards}
             isAutoPlaying={false}
           />

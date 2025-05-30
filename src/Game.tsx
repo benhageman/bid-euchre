@@ -137,6 +137,7 @@ const Game: React.FC = () => {
         setWinningBid(null);      // ✅ clear previous winner
         setIsBidding(true);       // ✅ show bidding panel
         setIsMyBidTurn(false);
+        setTricksWon({});          // ✅ Reset trick counts
         });
 
     socket.on("your-turn-to-bid", () => {
@@ -230,6 +231,7 @@ const Game: React.FC = () => {
       bids={bids}
       winningBid={winningBid}
       playableCards={playableCards}
+      isBidding={isBidding}
     />
   </>
 );
