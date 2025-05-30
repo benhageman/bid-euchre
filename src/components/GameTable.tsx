@@ -33,9 +33,9 @@ type Props = {
   isMyTurn: boolean;
   youId: string;
   playedThisTrick: Set<string>;
-  biddingActive?: boolean;
-  bids?: Bid[];
   winningBid?: Bid | null;
+  bids?: Bid[];
+
 };
 
 const GameTable: React.FC<Props> = ({
@@ -49,7 +49,6 @@ const GameTable: React.FC<Props> = ({
   isMyTurn,
   youId,
   playedThisTrick,
-  biddingActive,
   bids,
   winningBid,
 }) => {
@@ -78,11 +77,10 @@ const GameTable: React.FC<Props> = ({
           <PlayerArea
             name={topPlayer.name}
             tricks={tricksWon[topPlayer.id] || 0}
-            isCurrentTurn={
-              currentTurnId === topPlayer.id &&
-              !playedThisTrick.has(topPlayer.id)
-            }
+            isCurrentTurn={currentTurnId === topPlayer.id && !playedThisTrick.has(topPlayer.id)}
+            bid={bids?.find(b => b?.name === topPlayer.name) || null}
           />
+
         </div>
       )}
 
@@ -92,13 +90,11 @@ const GameTable: React.FC<Props> = ({
         {leftPlayer && (
           <div className="flex-1 max-w-[70px]">
             <PlayerArea
-              name={leftPlayer.name}
-              tricks={tricksWon[leftPlayer.id] || 0}
-              isCurrentTurn={
-                currentTurnId === leftPlayer.id &&
-                !playedThisTrick.has(leftPlayer.id)
-              }
-              vertical
+                name={leftPlayer.name}
+                tricks={tricksWon[leftPlayer.id] || 0}
+                isCurrentTurn={currentTurnId === leftPlayer.id && !playedThisTrick.has(leftPlayer.id)}
+                vertical
+                bid={bids?.find(b => b?.name === leftPlayer.name) || null}
             />
           </div>
         )}
@@ -108,8 +104,6 @@ const GameTable: React.FC<Props> = ({
           <Trick
             trick={trickCards}
             players={rotated}
-            bidding={biddingActive}
-            bids={bids}
           />
         </div>
 
@@ -117,14 +111,13 @@ const GameTable: React.FC<Props> = ({
         {rightPlayer && (
           <div className="flex-1 max-w-[70px]">
             <PlayerArea
-              name={rightPlayer.name}
-              tricks={tricksWon[rightPlayer.id] || 0}
-              isCurrentTurn={
-                currentTurnId === rightPlayer.id &&
-                !playedThisTrick.has(rightPlayer.id)
-              }
-              vertical
+                name={rightPlayer.name}
+                tricks={tricksWon[rightPlayer.id] || 0}
+                isCurrentTurn={currentTurnId === rightPlayer.id && !playedThisTrick.has(rightPlayer.id)}
+                vertical
+                bid={bids?.find(b => b?.name === rightPlayer.name) || null}
             />
+
           </div>
         )}
       </div>
@@ -135,11 +128,10 @@ const GameTable: React.FC<Props> = ({
           <PlayerArea
             name={bottomPlayer.name || "You"}
             tricks={tricksWon[bottomPlayer.id] || 0}
-            isCurrentTurn={
-              currentTurnId === bottomPlayer.id &&
-              !playedThisTrick.has(bottomPlayer.id)
-            }
-          />
+            isCurrentTurn={currentTurnId === bottomPlayer.id && !playedThisTrick.has(bottomPlayer.id)}
+            bid={bids?.find(b => b?.name === bottomPlayer.name) || null}
+        />
+
         )}
 
         <div className="w-full px-1 overflow-hidden">

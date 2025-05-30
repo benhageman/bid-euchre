@@ -1,4 +1,3 @@
-// src/components/ScoreBoard.tsx
 import React from "react";
 import clsx from "clsx";
 
@@ -24,6 +23,26 @@ const trumpMap: Record<string, { emoji: string; color: string }> = {
 };
 
 const ScoreBoard: React.FC<Props> = ({ scores, winningBid }) => {
+  const getBidDisplay = () => {
+    if (!winningBid) return null;
+    const suitEmoji = trumpMap[winningBid.trump]?.emoji || "";
+    const colorClass = trumpMap[winningBid.trump]?.color || "";
+
+    if (winningBid.amount === "moon") {
+      return (
+        <span className={clsx("font-mono", colorClass)}>
+          🌙 {suitEmoji}
+        </span>
+      );
+    }
+
+    return (
+      <span className={clsx("font-mono", colorClass)}>
+        Bid: {winningBid.amount} {suitEmoji}
+      </span>
+    );
+  };
+
   return (
     <div className="flex justify-center items-center space-x-4 text-xl font-bold flex-wrap">
       <div className="bg-blue-700 px-4 py-2 rounded-lg shadow">
@@ -35,11 +54,7 @@ const ScoreBoard: React.FC<Props> = ({ scores, winningBid }) => {
       {winningBid && (
         <div className="bg-yellow-300 text-black px-3 py-1 rounded-lg shadow text-sm flex items-center gap-2">
           <span>{winningBid.name} won:</span>
-          <span className={clsx("font-mono", trumpMap[winningBid.trump]?.color)}>
-            {winningBid.amount === "moon"
-              ? "🌙 Moon"
-              : `${winningBid.amount} ${trumpMap[winningBid.trump]?.emoji || ''}`}
-          </span>
+          {getBidDisplay()}
         </div>
       )}
     </div>

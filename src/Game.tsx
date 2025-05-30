@@ -204,7 +204,6 @@ const Game: React.FC = () => {
       isMyTurn={currentTurnId === (socket?.id ?? "")}
       youId={myId || ""}
       playedThisTrick={playedThisTrick}
-      biddingActive={isBidding}
       bids={bids}
       winningBid={winningBid}
     />

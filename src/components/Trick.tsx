@@ -13,61 +13,14 @@ type Player = {
   name: string;
 };
 
-type Bid = {
-  name: string;
-  amount: number | "moon";
-  trump: string;
-};
-
 type Props = {
   trick: TrickCard[];
   players: Player[];
-  bidding?: boolean;
-  bids?: (Bid | null)[];
   youId?: string;
 };
 
-const trumpMap: Record<string, { emoji: string; color: string }> = {
-  spades: { emoji: "♠️", color: "text-black" },
-  hearts: { emoji: "♥️", color: "text-red-600" },
-  diamonds: { emoji: "♦️", color: "text-red-600" },
-  clubs: { emoji: "♣️", color: "text-black" },
-  high: { emoji: "⬆️", color: "text-blue-500" },
-  low: { emoji: "⬇️", color: "text-blue-500" },
-};
-
-const Trick: React.FC<Props> = ({ trick, players, bidding = false, bids = [], youId }) => {
-  if (bidding) {
-    return (
-      <div className="w-full max-w-xs mx-auto bg-white text-black rounded-md p-3 shadow">
-        <h3 className="text-center font-bold mb-2">Bids</h3>
-        <ul className="space-y-1 text-sm">
-          {players.map((player, index) => {
-            const bid = bids[index];
-            if (!bid || bid.amount === 0) {
-              return (
-                <li key={index} className="text-gray-400">
-                  {player.name} passed
-                </li>
-              );
-            }
-
-            const { emoji, color } = trumpMap[bid.trump] || {};
-            return (
-              <li key={index} className="flex gap-2 items-center">
-                <span className="font-semibold">{bid.name}:</span>
-                <span className={clsx("font-mono", color)}>
-                  {bid.amount === "moon" ? "🌙 Moon" : `${bid.amount} ${emoji}`}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    );
-  }
-
-  const playerIndex = youId ? players.findIndex(p => p.id === youId) : 0;
+const Trick: React.FC<Props> = ({ trick, players, youId }) => {
+  const playerIndex = youId ? players.findIndex((p) => p.id === youId) : 0;
   const rotated = [...players];
   if (playerIndex > 0) {
     const cut = rotated.splice(0, playerIndex);
@@ -82,7 +35,7 @@ const Trick: React.FC<Props> = ({ trick, players, bidding = false, bids = [], yo
   };
 
   const renderCard = (playerId: string | undefined) => {
-    const play = trick.find(p => p.id === playerId);
+    const play = trick.find((p) => p.id === playerId);
     if (!play) return null;
 
     const { display, color } = formatCard(play.card);
@@ -98,7 +51,7 @@ const Trick: React.FC<Props> = ({ trick, players, bidding = false, bids = [], yo
           {display}
         </div>
         <div className="text-sm text-gray-300 mt-1">
-          {players.find(p => p.id === play.id)?.name}
+          {players.find((p) => p.id === play.id)?.name}
         </div>
       </div>
     );
