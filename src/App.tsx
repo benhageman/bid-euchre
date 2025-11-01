@@ -18,8 +18,8 @@ function App() {
 
   // Setup socket connection once on mount
   useEffect(() => {
-    //const newSocket = io('http://localhost:3001'); // Change if using remote server
-    const newSocket = io('wss://bid-euchre-4ehv.onrender.com');
+    const newSocket = io('http://localhost:3001'); // Change if using remote server
+    //const newSocket = io('wss://bid-euchre-4ehv.onrender.com');
     setSocket(newSocket);
     return () => {
       newSocket.disconnect();

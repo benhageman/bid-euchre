@@ -5,6 +5,9 @@ import { io } from 'socket.io-client';
 // export const socket = io('http://localhost:3001', {
 //   autoConnect: true,
 // });
-export const socket = io('wss://bid-euchre-4ehv.onrender.com', {
+
+//http://localhost:3001
+//wss://bid-euchre-4ehv.onrender.com
+export const socket = io('http://localhost:3001', {
   autoConnect: true,
 });

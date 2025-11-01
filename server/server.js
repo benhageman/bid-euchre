@@ -295,19 +295,53 @@ io.on('connection', (socket) => {
     if (!name || !room) return;
     socket.join(room);
     rooms[room] = rooms[room] || [];
-    rooms[room] = rooms[room].filter(p => p.id !== socket.id);
-    rooms[room].push({ id: socket.id, name });
+
+    const existingPlayer = rooms[room].find(p => p.name === name);
+    if (existingPlayer) {
+      existingPlayer.id = socket.id; // 👈 Reconnect: update socket ID
+    } else {
+      rooms[room].push({ id: socket.id, name }); // 👈 New player
+    }
+
 
     io.to(room).emit('room-update', { message: `${name} hosted room ${room}`, room });
     io.to(room).emit('player-list', rooms[room]);
+    // ✅ Restore game state on reconnect
+    const playerId = socket.id;
+    if (hands[room]?.[playerId]) {
+      io.to(playerId).emit('deal-hand', hands[room][playerId]);
+    }
+    if (tricks[room]) {
+      io.to(playerId).emit('trick-updated', tricks[room]);
+    }
+    if (bids[room]) {
+      io.to(playerId).emit('bids-updated', bids[room]);
+    }
+    if (teamScores[room]) {
+      io.to(playerId).emit('score-update', teamScores[room]);
+    }
+    if (currentTurnIndex[room] !== undefined) {
+      const players = rooms[room];
+      const currentPlayer = players?.[currentTurnIndex[room]];
+      if (currentPlayer?.id) {
+        io.to(playerId).emit('current-turn', currentPlayer.id);
+      }
+    }
+
   });
 
   socket.on('join', ({ name, room }) => {
     if (!name || !room) return;
     socket.join(room);
     rooms[room] = rooms[room] || [];
-    rooms[room] = rooms[room].filter(p => p.id !== socket.id);
-    rooms[room].push({ id: socket.id, name });
+
+    const existingPlayer = rooms[room].find(p => p.name === name);
+    if (existingPlayer) {
+      existingPlayer.id = socket.id; // 👈 Reconnect: update socket ID
+    } else {
+      rooms[room].push({ id: socket.id, name }); // 👈 New player
+    }
+
 
     io.to(room).emit('room-update', { message: `${name} joined room ${room}`, room });
     io.to(room).emit('player-list', rooms[room]);
@@ -611,9 +645,13 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     for (const room in rooms) {
-      rooms[room] = rooms[room].filter(p => p.id !== socket.id);
-      io.to(room).emit('player-list', rooms[room]);
+      const player = rooms[room].find(p => p.id === socket.id);
+      if (player) {
+        player.id = null; // mark as temporarily disconnected
+        io.to(room).emit('player-list', rooms[room]);
+      }
     }
+
     console.log('A user disconnected:', socket.id);
   });
 });
