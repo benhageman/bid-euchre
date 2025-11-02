@@ -10,7 +10,8 @@ import {
 import { Server, Socket } from 'socket.io';
 import { GameStateService } from './services/game-state.service';
 import { BotService } from './services/bot.service';
-import { HostRoomDto, JoinRoomDto, MakeBidDto, PlayCardDto, AddBotDto } from './dto/game.dto';
+import { ValidationService } from './services/validation.service';
+import { HostRoomDto, JoinRoomDto, ReconnectPlayerDto, MakeBidDto, PlayCardDto, AddBotDto } from './dto/game.dto';
 import { Bid, Card } from './types';
 
 @WebSocketGateway({
@@ -25,6 +26,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly gameStateService: GameStateService,
     private readonly botService: BotService,
+    private readonly validationService: ValidationService,
   ) {}
 
   handleConnection(client: Socket) {
@@ -32,7 +34,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   handleDisconnect(client: Socket) {
-    // Find and remove player from all rooms
+    // Find player in all rooms but DON'T remove them immediately
     const rooms = this.gameStateService.getAllRooms();
     
     for (const [roomId, room] of Object.entries(rooms)) {
@@ -40,18 +42,55 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       
       if (playerIndex !== -1) {
         const playerName = room.gameState.players[playerIndex].name;
+        const oldSocketId = client.id;
         
-        this.gameStateService.removePlayerFromRoom(roomId, client.id);
+        console.log(`Player ${playerName} (${oldSocketId}) disconnected from room ${roomId}. Waiting for reconnection...`);
+        console.log(`Saving hand: ${room.gameState.hands[oldSocketId]?.length || 0} cards`);
+        
+        // Save the hand data under the disconnected marker BEFORE updating the ID
+        const disconnectedMarker = `disconnected-${playerName}`;
+        if (room.gameState.hands[oldSocketId]) {
+          room.gameState.hands[disconnectedMarker] = room.gameState.hands[oldSocketId];
+          console.log(`Saved hand under key: ${disconnectedMarker}`);
+        }
+        
+        // Also save tricks won
+        if (room.gameState.tricksWon[oldSocketId]) {
+          room.gameState.tricksWon[disconnectedMarker] = room.gameState.tricksWon[oldSocketId];
+        }
+        
+        // Mark player as disconnected but keep in game
+        room.gameState.players[playerIndex].id = disconnectedMarker;
         
         this.server.to(roomId).emit('room-update', {
-          message: `${playerName} disconnected`,
+          message: `${playerName} disconnected. Game paused.`,
           room: roomId
         });
         
-        const updatedState = this.gameStateService.getRoom(roomId);
-        if (updatedState) {
-          this.server.to(roomId).emit('player-list', updatedState.gameState.players);
-        }
+        // Give player 30 seconds to reconnect before removing
+        setTimeout(() => {
+          const currentRoom = this.gameStateService.getRoom(roomId);
+          if (currentRoom) {
+            const stillDisconnected = currentRoom.gameState.players.find(
+              p => p.id === disconnectedMarker
+            );
+            
+            if (stillDisconnected) {
+              console.log(`Player ${playerName} did not reconnect. Removing from game.`);
+              this.gameStateService.removePlayerFromRoom(roomId, disconnectedMarker);
+              
+              this.server.to(roomId).emit('room-update', {
+                message: `${playerName} has left the game`,
+                room: roomId
+              });
+              
+              const updatedState = this.gameStateService.getRoom(roomId);
+              if (updatedState) {
+                this.server.to(roomId).emit('player-list', updatedState.gameState.players);
+              }
+            }
+          }
+        }, 30000); // 30 second grace period
         
         break;
       }
@@ -63,6 +102,20 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: HostRoomDto,
   ) {
+    // Validate player name
+    const nameValidation = this.validationService.validatePlayerName(data.name);
+    if (!nameValidation.valid) {
+      client.emit('error', { message: nameValidation.error });
+      return;
+    }
+
+    // Validate room ID
+    const roomValidation = this.validationService.validateRoomId(data.room);
+    if (!roomValidation.valid) {
+      client.emit('error', { message: roomValidation.error });
+      return;
+    }
+
     const player = { id: client.id, name: data.name };
     const room = this.gameStateService.createRoom(data.room, player);
     
@@ -81,10 +134,41 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: JoinRoomDto,
   ) {
+    // Validate room exists
+    const roomExistsValidation = this.validationService.validateRoomExists(data.room);
+    if (!roomExistsValidation.valid) {
+      client.emit('error', { message: roomExistsValidation.error });
+      return;
+    }
+
+    // Validate player name
+    const nameValidation = this.validationService.validatePlayerName(data.name);
+    if (!nameValidation.valid) {
+      client.emit('error', { message: nameValidation.error });
+      return;
+    }
+
+    // Validate room size
+    const sizeValidation = this.validationService.validateRoomSize(data.room);
+    if (!sizeValidation.valid) {
+      client.emit('error', { message: sizeValidation.error });
+      return;
+    }
+
+    // Validate player not already in room
+    const notInRoomValidation = this.validationService.validatePlayerNotInRoom(data.room, data.name);
+    if (!notInRoomValidation.valid) {
+      client.emit('error', { message: notInRoomValidation.error });
+      return;
+    }
+
     const player = { id: client.id, name: data.name };
     const gameState = this.gameStateService.addPlayerToRoom(data.room, player);
     
-    if (!gameState) return;
+    if (!gameState) {
+      client.emit('error', { message: 'Failed to join room' });
+      return;
+    }
     
     client.join(data.room);
     
@@ -123,16 +207,192 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+  @SubscribeMessage('reconnect-player')
+  handleReconnect(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: ReconnectPlayerDto,
+  ) {
+    const room = this.gameStateService.getRoom(data.room);
+    if (!room) {
+      console.log(`Room ${data.room} not found for reconnection`);
+      return;
+    }
+
+    console.log('=== RECONNECTION ATTEMPT ===');
+    console.log('Player name:', data.name);
+    console.log('New socket ID:', client.id);
+    console.log('Current players:', room.gameState.players.map(p => ({ id: p.id, name: p.name })));
+    console.log('Current hands keys:', Object.keys(room.gameState.hands));
+
+    // Find the disconnected player
+    const playerIndex = room.gameState.players.findIndex(
+      p => p.id === `disconnected-${data.name}` || p.name === data.name
+    );
+
+    if (playerIndex === -1) {
+      console.log(`Player ${data.name} not found in room ${data.room}`);
+      // Player might be trying to join a game they weren't part of
+      return;
+    }
+
+    const player = room.gameState.players[playerIndex];
+    const oldId = player.id; // This will be "disconnected-{name}"
+    
+    console.log('Found player at index:', playerIndex);
+    console.log('Old ID marker:', oldId);
+    console.log('Hand exists for old ID:', !!room.gameState.hands[oldId]);
+    
+    // Update socket ID to new connection
+    player.id = client.id;
+    
+    // Transfer hand from disconnected marker to new ID
+    if (room.gameState.hands[oldId]) {
+      room.gameState.hands[client.id] = room.gameState.hands[oldId];
+      delete room.gameState.hands[oldId];
+      console.log('Transferred hand from', oldId, 'to', client.id);
+      console.log('Hand cards:', room.gameState.hands[client.id].length);
+    } else {
+      console.log('WARNING: No hand found for old ID:', oldId);
+      console.log('Available hand keys:', Object.keys(room.gameState.hands));
+    }
+    
+    // Transfer tricks won from old ID to new ID
+    if (room.gameState.tricksWon[oldId]) {
+      room.gameState.tricksWon[client.id] = room.gameState.tricksWon[oldId];
+      delete room.gameState.tricksWon[oldId];
+    }
+    
+    // Update current turn if it was the disconnected player's turn
+    if (room.gameState.currentTurnId === oldId) {
+      room.gameState.currentTurnId = client.id;
+    }
+    
+    // Update trick cards if player played in current trick
+    room.gameState.trick = room.gameState.trick.map(card => 
+      card.playerId === oldId ? { ...card, playerId: client.id } : card
+    );
+    
+    // Update winning bid if it was the reconnected player
+    if (room.gameState.winningBid && room.gameState.winningBid.id === oldId) {
+      room.gameState.winningBid.id = client.id;
+    }
+    
+    // Join the room
+    client.join(data.room);
+    
+    console.log(`Player ${data.name} reconnected to room ${data.room}`);
+    
+    // Notify everyone
+    this.server.to(data.room).emit('room-update', {
+      message: `${data.name} reconnected`,
+      room: data.room,
+    });
+    
+    // Send full game state to reconnected player
+    this.server.to(data.room).emit('player-list', room.gameState.players);
+    
+    // Restore player's hand
+    if (room.gameState.hands[client.id]) {
+      this.server.to(client.id).emit('deal-hand', {
+        cards: room.gameState.hands[client.id].map(c =>
+          `${c.value}${c.suit.charAt(0).toUpperCase()}`
+        ),
+        playerId: client.id,
+      });
+    }
+    
+    // Restore current trick
+    if (room.gameState.trick.length > 0) {
+      this.server.to(client.id).emit('trick-updated', {
+        trick: room.gameState.trick.map(c => ({
+          id: c.playerId,
+          card: `${c.value}${c.suit.charAt(0).toUpperCase()}`,
+        })),
+      });
+    }
+    
+    // Restore bids if in bidding phase
+    if (room.gameState.isBidding) {
+      this.server.to(client.id).emit('bidding-started', {
+        dealer: room.gameState.players[room.gameState.dealerIndex],
+        bids: room.gameState.bids,
+      });
+      this.server.to(client.id).emit('bids-updated', room.gameState.bids);
+    } else if (room.gameState.winningBid) {
+      // Restore winning bid
+      this.server.to(client.id).emit('bidding-complete', {
+        winner: room.gameState.winningBid,
+        trump: room.gameState.winningBid.trump,
+      });
+    }
+    
+    // Restore scores
+    this.server.to(client.id).emit('score-update', room.gameState.teamScores);
+    
+    // Restore current turn
+    if (room.gameState.currentTurnId) {
+      this.server.to(client.id).emit('current-turn', {
+        playerId: room.gameState.currentTurnId,
+        validMoves: this.gameStateService.getValidMoves(data.room, room.gameState.currentTurnId),
+      });
+    }
+    
+    // Send confirmation
+    this.server.to(client.id).emit('reconnected', {
+      message: 'Successfully reconnected',
+      gameState: {
+        players: room.gameState.players,
+        currentTurnId: room.gameState.currentTurnId,
+        teamScores: room.gameState.teamScores,
+        isBidding: room.gameState.isBidding,
+      },
+    });
+  }
+
   @SubscribeMessage('submit-bid')
   handleBid(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: MakeBidDto,
   ) {
+    // Validate room exists
+    const roomValidation = this.validationService.validateRoomExists(data.room);
+    if (!roomValidation.valid) {
+      client.emit('error', { message: roomValidation.error });
+      return;
+    }
+
+    // Validate player in room
+    const playerValidation = this.validationService.validatePlayerInRoom(data.room, client.id);
+    if (!playerValidation.valid) {
+      client.emit('error', { message: playerValidation.error });
+      return;
+    }
+
+    // Validate it's their turn to bid
+    const turnValidation = this.validationService.validateBidTurn(data.room, client.id);
+    if (!turnValidation.valid) {
+      client.emit('error', { message: turnValidation.error });
+      return;
+    }
+
+    // Validate bid amount and trump
+    const bidValidation = this.validationService.validateBid(data.amount, data.trump);
+    if (!bidValidation.valid) {
+      client.emit('error', { message: bidValidation.error });
+      return;
+    }
+
     const room = this.gameStateService.getRoom(data.room);
-    if (!room) return;
-    
+    if (!room) {
+      client.emit('error', { message: 'Room not found' });
+      return;
+    }
+
     const player = room.gameState.players.find(p => p.id === client.id);
-    if (!player) return;
+    if (!player) {
+      client.emit('error', { message: 'Player not found' });
+      return;
+    }
     
     const bid: Bid = {
       id: client.id,
@@ -405,9 +665,34 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: PlayCardDto,
   ) {
-    const room = this.gameStateService.getRoom(data.room);
-    if (!room) return;
-    
+    // Validate room exists
+    const roomValidation = this.validationService.validateRoomExists(data.room);
+    if (!roomValidation.valid) {
+      client.emit('error', { message: roomValidation.error });
+      return;
+    }
+
+    // Validate player in room
+    const playerValidation = this.validationService.validatePlayerInRoom(data.room, client.id);
+    if (!playerValidation.valid) {
+      client.emit('error', { message: playerValidation.error });
+      return;
+    }
+
+    // Validate it's their turn to play
+    const turnValidation = this.validationService.validatePlayTurn(data.room, client.id);
+    if (!turnValidation.valid) {
+      client.emit('error', { message: turnValidation.error });
+      return;
+    }
+
+    // Validate card format
+    const formatValidation = this.validationService.validateCardFormat(data.card);
+    if (!formatValidation.valid) {
+      client.emit('error', { message: formatValidation.error });
+      return;
+    }
+
     // Parse card string (e.g., "9S" -> {value: "9", suit: "spades"})
     const cardStr = data.card;
     const value = cardStr.slice(0, -1);
@@ -424,6 +709,20 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       suit: suitMap[suitChar],
       playerId: client.id,
     };
+
+    // Validate player has the card
+    const hasCardValidation = this.validationService.validatePlayerHasCard(data.room, client.id, card);
+    if (!hasCardValidation.valid) {
+      client.emit('error', { message: hasCardValidation.error });
+      return;
+    }
+
+    // Validate card is a valid move
+    const validMoveValidation = this.validationService.validateCardPlay(data.room, client.id, card);
+    if (!validMoveValidation.valid) {
+      client.emit('error', { message: validMoveValidation.error });
+      return;
+    }
     
     const gameState = this.gameStateService.playCard(data.room, client.id, card);
     

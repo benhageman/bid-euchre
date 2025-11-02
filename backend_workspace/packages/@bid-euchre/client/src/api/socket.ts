@@ -54,7 +54,9 @@ interface ServerToClientEvents {
   /** Updates team scores */
   'score-update': (scores: { team1: number; team2: number }) => void;
   /** Updates whose turn it is */
-  'current-turn': (playerId: string) => void;
+  'current-turn': (playerId: string | { playerId: string; validMoves: string[] }) => void;
+  /** Notifies successful reconnection */
+  'reconnected': (data: { message: string; gameState: any }) => void;
 }
 
 /**
@@ -65,6 +67,8 @@ interface ClientToServerEvents {
   'host': (data: { name: string; room: string }) => void;
   /** Join an existing game room */
   'join': (data: { name: string; room: string }) => void;
+  /** Reconnect to existing game */
+  'reconnect-player': (data: { name: string; room: string }) => void;
   /** Request current player list */
   'get-player-list': (room: string) => void;
   /** Submit a bid during bidding phase */
@@ -92,9 +96,94 @@ class GameSocket {
   constructor() {
     this.socket = io('http://localhost:3001', {
       autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
     });
 
     this.setupListeners();
+    this.setupConnectionListeners();
+    this.loadPersistedState();
+  }
+
+  /**
+   * Load persisted player state from localStorage
+   */
+  private loadPersistedState() {
+    const savedName = localStorage.getItem('bid-euchre-player-name');
+    const savedRoom = localStorage.getItem('bid-euchre-room');
+    
+    if (savedName && savedRoom) {
+      this.room = savedRoom;
+    }
+  }
+
+  /**
+   * Save player state to localStorage
+   */
+  private saveState(name: string, room: string) {
+    localStorage.setItem('bid-euchre-player-name', name);
+    localStorage.setItem('bid-euchre-room', room);
+  }
+
+  /**
+   * Clear persisted state
+   */
+  public clearPersistedState() {
+    localStorage.removeItem('bid-euchre-player-name');
+    localStorage.removeItem('bid-euchre-room');
+  }
+
+  /**
+   * Setup connection event listeners for reconnection handling
+   */
+  private setupConnectionListeners() {
+    this.socket.io.on('reconnect', (attemptNumber: number) => {
+      console.log('Reconnected after', attemptNumber, 'attempts');
+    });
+
+    this.socket.io.on('reconnect_attempt', (attemptNumber: number) => {
+      console.log('Reconnection attempt:', attemptNumber);
+    });
+
+    this.socket.io.on('reconnect_failed', () => {
+      console.error('Reconnection failed after all attempts');
+    });
+
+    this.socket.on('connect', () => {
+      console.log('Socket connected:', this.socket.id);
+      
+      // If we have a saved room, attempt to reconnect
+      const savedName = localStorage.getItem('bid-euchre-player-name');
+      const savedRoom = localStorage.getItem('bid-euchre-room');
+      
+      if (savedName && savedRoom && this.room) {
+        console.log('Reconnecting to game:', { name: savedName, room: savedRoom });
+        this.socket.emit('reconnect-player', { 
+          name: savedName, 
+          room: savedRoom 
+        });
+      }
+    });
+
+    this.socket.on('disconnect', (reason) => {
+      console.log('Socket disconnected:', reason);
+      
+      // If server initiated disconnect, don't try to reconnect
+      if (reason === 'io server disconnect') {
+        this.socket.connect();
+      }
+    });
+
+    this.socket.io.on('error', (error: Error) => {
+      console.error('Connection error:', error);
+    });
+
+    this.socket.on('reconnected', (data) => {
+      console.log('Successfully reconnected to game:', data);
+    });
   }
 
   private setupListeners() {
@@ -178,11 +267,13 @@ class GameSocket {
 
   public hostGame(name: string, room: string) {
     this.room = room;
+    this.saveState(name, room);
     this.socket.emit('host', { name, room });
   }
 
   public joinGame(name: string, room: string) {
     this.room = room;
+    this.saveState(name, room);
     this.socket.emit('join', { name, room });
   }
 
@@ -209,6 +300,27 @@ class GameSocket {
     if (this.room) {
       this.socket.emit('add-bot', { room: this.room });
     }
+  }
+
+  /**
+   * Get current connection status
+   */
+  public isConnected(): boolean {
+    return this.socket.connected;
+  }
+
+  /**
+   * Get saved player name
+   */
+  public getSavedName(): string | null {
+    return localStorage.getItem('bid-euchre-player-name');
+  }
+
+  /**
+   * Get saved room
+   */
+  public getSavedRoom(): string | null {
+    return localStorage.getItem('bid-euchre-room');
   }
 }
 

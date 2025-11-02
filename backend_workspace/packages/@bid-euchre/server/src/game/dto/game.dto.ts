@@ -21,6 +21,16 @@ export class JoinRoomDto {
   room: string;
 }
 
+export class ReconnectPlayerDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsString()
+  @IsNotEmpty()
+  room: string;
+}
+
 export class MakeBidDto {
   @IsNotEmpty()
   amount: BidAmount;

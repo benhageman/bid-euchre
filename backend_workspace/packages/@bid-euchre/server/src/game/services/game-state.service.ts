@@ -153,25 +153,30 @@ export class GameStateService {
     
     // If this is the first card being played and there's a completed trick, clear it
     if (room.gameState.trick.length === 4) {
+      console.log('Clearing completed trick before adding new card');
       room.gameState.trick = [];
     }
     
     room.gameState.trick.push(card);
+    console.log(`Card played. Trick now has ${room.gameState.trick.length} cards. Total tricks won so far: ${Object.values(room.gameState.tricksWon).reduce((a, b) => a + b, 0)}`);
 
     // Check if trick is complete
     if (room.gameState.trick.length === 4) {
+      console.log('Trick is complete! Evaluating...');
       const winnerId = this.gameService.evaluateTrick(
         room.gameState.trick,
         room.gameState.winningBid?.trump || 'high'
       );
 
       room.gameState.tricksWon[winnerId] = (room.gameState.tricksWon[winnerId] || 0) + 1;
+      console.log(`Trick winner: ${winnerId}. Total tricks won: ${Object.values(room.gameState.tricksWon).reduce((a, b) => a + b, 0)}`);
       // Don't clear trick here - let it be cleared when next card is played
       room.gameState.currentTurnId = winnerId;
 
       // Check if hand is complete (all 6 tricks played)
       const totalTricks = Object.values(room.gameState.tricksWon).reduce((a, b) => a + b, 0);
       if (totalTricks === 6) {
+        console.log('HAND IS COMPLETE! All 6 tricks finished.');
         // Calculate scores
         const playerTeams = this.gameService.getPlayerTeams(room.gameState.players.map(p => p.id));
         const handScores = this.gameService.calculateHandScore(
