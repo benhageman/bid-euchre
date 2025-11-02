@@ -135,6 +135,10 @@ class GameSocket {
     this.socket.on('bidding-started', ({ dealer, bids }) => {
       store.dispatch(setIsBidding(true));
       store.dispatch(updateBids(bids));
+      // Reset tricks won for new hand
+      store.dispatch(updateTricksWon({}));
+      // Clear the trick display
+      store.dispatch(updateTrick([]));
     });
 
     this.socket.on('bids-updated', (bids) => {

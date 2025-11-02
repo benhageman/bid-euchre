@@ -46,10 +46,10 @@ const ScoreBoard: React.FC<Props> = ({ scores, winningBid }) => {
 
   return (
     <div className="flex justify-center items-center space-x-4 text-xl font-bold flex-wrap">
-      <div className="bg-blue-700 px-4 py-2 rounded-lg shadow">
+      <div className="bg-red-700 px-4 py-2 rounded-lg shadow">
         Team 1: {scores.team1}
       </div>
-      <div className="bg-red-700 px-4 py-2 rounded-lg shadow">
+      <div className="bg-blue-700 px-4 py-2 rounded-lg shadow">
         Team 2: {scores.team2}
       </div>
       {winningBid && (

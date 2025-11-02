@@ -1,24 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useSelector, useDispatch } from 'react-redux';
 import { gameSocket } from '../../api/socket';
+import { RootState } from '../../store';
+import { setPlayers } from '../game/gameSlice';
 
 const Lobby: React.FC = () => {
   const [name, setName] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [status, setStatus] = useState('');
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const players = useSelector((state: RootState) => state.game.players);
+
+  // Clear players when entering lobby
+  useEffect(() => {
+    dispatch(setPlayers([]));
+  }, [dispatch]);
+
+  // Navigate when players list is populated
+  useEffect(() => {
+    console.log('useEffect triggered:', { pendingNavigation, playersLength: players.length, players });
+    if (pendingNavigation && players.length > 0) {
+      console.log('Navigating to game with players:', players);
+      navigate(`/game/${pendingNavigation}`);
+      setPendingNavigation(null);
+    }
+  }, [players, pendingNavigation, navigate]);
 
   const handleHostGame = () => {
     const room = roomCode || Math.random().toString(36).substring(2, 8).toUpperCase();
     if (!name) return;
+    console.log('Hosting game:', { name, room });
     gameSocket.hostGame(name, room);
-    navigate(`/game/${room}`);
+    setPendingNavigation(room);
   };
 
   const handleJoinGame = () => {
     if (!name || !roomCode) return;
+    console.log('Joining game:', { name, roomCode });
     gameSocket.joinGame(name, roomCode);
-    navigate(`/game/${roomCode}`);
+    setPendingNavigation(roomCode);
   };
 
   return (

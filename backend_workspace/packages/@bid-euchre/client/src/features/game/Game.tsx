@@ -23,6 +23,20 @@ const Game: React.FC = () => {
     playableCards
   } = useSelector((state: RootState) => state.game);
 
+  // Ensure we're connected to the socket
+  useEffect(() => {
+    if (roomCode && gameSocket) {
+      // If room isn't set in socket, we need to rejoin
+      // This can happen on page refresh or direct navigation
+      const currentRoom = gameSocket.getRoom();
+      if (!currentRoom || currentRoom !== roomCode) {
+        // We can't rejoin without a name, so just ensure socket is connected
+        // The user should come through the lobby which calls joinGame
+        gameSocket.connect();
+      }
+    }
+  }, [roomCode]);
+
   const handlePlayCard = (card: string) => {
     if (gameSocket) {
       gameSocket.playCard(card);
